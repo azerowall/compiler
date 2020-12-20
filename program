@@ -1,12 +1,12 @@
 
 
-fn fibbonaci() -> u32 {
+fn fibbonaci(a: u32, b: u32, i: u32) -> u32 {
     let fib1: u32;
     let fib2: u32;
     let fib_sum: u32;
     
-    fib1 = 1;
-    fib2 = 1;
+    fib1 = a;
+    fib2 = b;
     while i {
         fib_sum = fib1 + fib2;
         fib1 = fib2;
@@ -18,5 +18,5 @@ fn fibbonaci() -> u32 {
 
 
 fn main() -> u32 {
-    return fibbonaci(8);
+    return fibbonaci(1, 1, 10);
 }

@@ -93,6 +93,11 @@ impl Codegen {
         llvm::core::LLVMInt32TypeInContext(self.context)
     }
 
+    unsafe fn dump_llvm_value(&self, val: LLVMValueRef) {
+        llvm::core::LLVMDumpValue(val);
+        println!();
+    }
+
     unsafe fn cg_func(&mut self, function: &Func) {
         let ret_type = self.get_llvm_type(&function.ret_type);
         let args_types: Vec<_> = function.args
@@ -108,13 +113,22 @@ impl Codegen {
         llvm::core::LLVMPositionBuilderAtEnd(self.builder, start_bb);
 
         self.vars.push_scope();
-        //todo!("add args");
         for (i, arg) in function.args.iter().enumerate() {
-            let value = llvm::core::LLVMGetParam(func, i as _);
-            self.vars.push(arg.ident.clone(), value);
+            let cname = ffi::CString::new(arg.ident.as_bytes()).unwrap();
+            
+            // Не самое лучшее решение, т.к. мы копируем параметры на стек.
+            // Вероятно llvm соптимизирует это, но всё же.
+            // TODO: различать изменяемые и неизменяемые параметры (let / let mut)
+            // и в зависимости от этого выделять память на стеке или нет
+            let arg_value = llvm::core::LLVMGetParam(func, i as _);
+            let arg_type = llvm::core::LLVMTypeOf(arg_value);
+            let new_arg_value = llvm::core::LLVMBuildAlloca(self.builder, arg_type, cname.as_ptr());
+            llvm::core::LLVMBuildStore(self.builder, arg_value, new_arg_value);
+            self.vars.push(arg.ident.clone(), new_arg_value);
         }
         if let Stmt::Block(ref stmts) = function.body {
             for stmt in stmts {
+                println!("{:?}",stmt);
                 self.cg_stmt(func, stmt);
             }
         }
@@ -244,6 +258,10 @@ impl Codegen {
             },
             Expr::Call(name, args) => {
                 let name = ffi::CString::new(name.as_bytes()).unwrap();
+                let args: Vec<_> = args
+                    .iter()
+                    .map(|arg| self.cg_expr(func, arg))
+                    .collect();
                 let func_ref = llvm::core::LLVMGetNamedFunction(self.module, name.as_ptr());
                 llvm::core::LLVMBuildCall(self.builder, func_ref, args.as_ptr() as _, args.len() as _, b"call\0".as_ptr() as _)
             }
