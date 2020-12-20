@@ -29,6 +29,7 @@ pub enum Expr {
     Sub(Box<Expr>, Box<Expr>),
     Mul(Box<Expr>, Box<Expr>),
     Div(Box<Expr>, Box<Expr>),
+    Mod(Box<Expr>, Box<Expr>),
     Literal(u32),
     Ref(Ident),
     Assign(Ident, Box<Expr>),

@@ -55,6 +55,7 @@ peg::parser!{
         rule product() -> Expr
             = a:atom() _ "*" _ b:product() { Expr::Mul(Box::new(a), Box::new(b)) }
             / a:atom() _ "/" _ b:product() { Expr::Div(Box::new(a), Box::new(b)) }
+            / a:atom() _ "%" _ b:product() { Expr::Mod(Box::new(a), Box::new(b)) }
             / atom()
 
         rule func_call() -> Expr

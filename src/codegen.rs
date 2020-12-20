@@ -83,6 +83,9 @@ impl Codegen {
     }
 
     pub fn gen(&mut self, program: &Program) {
+        unsafe {
+            self.add_llvm_extern_func();
+        }
         for func in &program.funcs {
             unsafe { self.cg_func(func); }
         }
@@ -98,6 +101,20 @@ impl Codegen {
         println!();
     }
 
+    unsafe fn add_llvm_extern_func(&self) {
+        let func_name = ffi::CString::new(&b"putchar"[..]).unwrap();
+
+        let ret_type = llvm::core::LLVMInt32TypeInContext(self.context);
+        let args_types = vec![
+            llvm::core::LLVMInt32TypeInContext(self.context),
+        ];
+        
+        let func_type = llvm::core::LLVMFunctionType(ret_type, args_types.as_ptr() as _, args_types.len() as _, 0);
+
+        let func = llvm::core::LLVMAddFunction(self.module, func_name.as_ptr(), func_type);
+        llvm::core::LLVMSetFunctionCallConv(func, llvm::LLVMCallConv::LLVMCCallConv as _);
+    }
+
     unsafe fn cg_func(&mut self, function: &Func) {
         let ret_type = self.get_llvm_type(&function.ret_type);
         let args_types: Vec<_> = function.args
@@ -106,7 +123,7 @@ impl Codegen {
             .collect();
 
         let func_type = llvm::core::LLVMFunctionType(ret_type, args_types.as_ptr() as _, args_types.len() as _, 0);
-        let func_name = ffi::CString::new(function.ident.as_bytes()).expect("func_name_convert");
+        let func_name = ffi::CString::new(function.ident.as_bytes()).unwrap();
         let func = llvm::core::LLVMAddFunction(self.module, func_name.as_ptr(), func_type);
 
         let start_bb = llvm::core::LLVMAppendBasicBlockInContext(self.context, func, b"entry\0".as_ptr() as _);
@@ -227,19 +244,25 @@ impl Codegen {
                 let lhs = self.cg_expr(func, &*lhs);
                 let rhs = self.cg_expr(func, &*rhs);
     
-                llvm::core::LLVMBuildSub(self.builder, lhs, rhs, b"subtmp\0".as_ptr() as _)
+                llvm::core::LLVMBuildSub(self.builder, lhs, rhs, b"sub\0".as_ptr() as _)
             },
             Expr::Mul(lhs, rhs) => {
                 let lhs = self.cg_expr(func, &*lhs);
                 let rhs = self.cg_expr(func, &*rhs);
     
-                llvm::core::LLVMBuildMul(self.builder, lhs, rhs, b"multmp\0".as_ptr() as _)
+                llvm::core::LLVMBuildMul(self.builder, lhs, rhs, b"mul\0".as_ptr() as _)
             },
             Expr::Div(lhs, rhs) => {
                 let lhs = self.cg_expr(func, &*lhs);
                 let rhs = self.cg_expr(func, &*rhs);
     
-                llvm::core::LLVMBuildUDiv(self.builder, lhs, rhs, b"divtmp\0".as_ptr() as _)
+                llvm::core::LLVMBuildUDiv(self.builder, lhs, rhs, b"div\0".as_ptr() as _)
+            },
+            Expr::Mod(lhs, rhs) => {
+                let lhs = self.cg_expr(func, &*lhs);
+                let rhs = self.cg_expr(func, &*rhs);
+
+                llvm::core::LLVMBuildURem(self.builder, lhs, rhs, b"rem\0".as_ptr() as _)
             },
             Expr::Ref(name) => {
                 let value = *self.vars.get(name)

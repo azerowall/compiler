@@ -1,4 +1,18 @@
 
+fn print_num(n: u32) -> u32 {
+    let zero: u32;
+    zero = 48;
+
+    if n {
+        print_num(n / 10);
+        putchar(zero + n % 10);
+    }
+    return 0;
+}
+
+fn println() -> u32 {
+    return putchar(10);
+}
 
 fn fibbonaci(a: u32, b: u32, i: u32) -> u32 {
     let fib1: u32;
@@ -12,11 +26,14 @@ fn fibbonaci(a: u32, b: u32, i: u32) -> u32 {
         fib1 = fib2;
         fib2 = fib_sum;
         i = i - 1;
+        print_num(fib_sum); println();
     }
     return fib_sum;
 }
 
 
 fn main() -> u32 {
+    print_num(100);
+    println();
     return fibbonaci(1, 1, 10);
 }
