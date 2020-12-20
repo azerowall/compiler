@@ -3,11 +3,25 @@ use crate::ast::*;
 peg::parser!{
     pub grammar code_parser() for str {
         pub rule program() -> Program
-            = _ funcs:function() ** _ { Program { funcs } }
+            = _ funcs:func_def() ** _ { Program { funcs } }
 
-        rule function() -> Func
-            = "fn" _ ident:ident() "(" _ args:func_args() _ ")" _  "->" _ ty:ident() _ body:statement_block() _
-                { Func { ident, args, ret_type: Type { ident: ty }, body } }
+        rule func_def() -> Func
+            = decl:func_decl() _ body:statement_block()? { Func { decl, body }}
+
+        rule func_decl() -> FuncDecl
+            = ext:func_external()? _ "fn" _ ident:ident() "(" _ args:func_args() _ ")" _  "->" _ ty:ident() {
+                    FuncDecl {
+                        external: ext.is_some(),
+                        calling_conv: if let Some(cc) = ext { cc } else { String::new() },
+                        ident,
+                        args,
+                        ret: Type { ident: ty }
+                    }
+                }
+
+        // dummy
+        rule func_external() -> String
+            = "extern" _ cc:$("\"C\"") { cc.to_string() }
 
         rule func_args() -> Vec<VarDecl>
             = decl:general_decl() ** ", " { decl }
@@ -69,6 +83,9 @@ peg::parser!{
 
         rule int_literal() -> Expr
             = n:$(['0'..='9']+) { Expr::Literal(n.parse().unwrap()) }
+
+        //rule str_literal() -> String
+        //    = "\"" n:$(!['"']*) "\"" { n.to_string() }
 
         rule ident() -> String
             = i:$(['a'..='z' | 'A'..='Z' | '_'] ['a'..='z' | 'A'..='Z' | '_' | '0'..='9']*) { i.to_string() }

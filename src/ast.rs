@@ -6,11 +6,18 @@ pub struct Program {
 }
 
 #[derive(Debug)]
-pub struct Func {
-    pub ident: Ident,
+pub struct FuncDecl {
+    pub external: bool,
+    pub calling_conv: String,
     pub args: Vec<VarDecl>,
-    pub ret_type: Type,
-    pub body: Stmt,
+    pub ret: Type,
+    pub ident: Ident,
+}
+
+#[derive(Debug)]
+pub struct Func {
+    pub decl: FuncDecl,
+    pub body: Option<Stmt>,
 }
 
 #[derive(Debug)]

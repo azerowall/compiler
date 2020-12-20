@@ -20,17 +20,18 @@ fn main() {
     }
 
     let ast = code_parser::program(&code);
+
+    match ast {
+        Ok(ast) => {
+            //println!("{:#?}", ast);
     
-    if let Ok(ast) = ast {
-        //println!("{:#?}", ast);
-
-        let mut cg = Codegen::new();
-        cg.gen(&ast);
-        cg.dump_to_file("out.s");
-        cg.dump();
-    } else {
-        println!("{:#?}", ast);
+            let mut cg = Codegen::new();
+            cg.gen(&ast);
+            cg.dump_to_file("out.s");
+            cg.dump();
+        },
+        Err(err) => {
+            println!("{:#?}", err);
+        }
     }
-
-    println!("Done!");
 }

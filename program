@@ -1,4 +1,28 @@
 
+extern "C" fn putchar(n: u32) -> u32
+
+fn println() -> u32 {
+    return putchar(10);
+}
+
+fn print_hello_world() -> u32 {
+    putchar(72);
+    putchar(101);
+    putchar(108);
+    putchar(108);
+    putchar(111);
+    putchar(44);
+    putchar(32);
+    putchar(119);
+    putchar(111);
+    putchar(114);
+    putchar(108);
+    putchar(100);
+    putchar(33);
+    println();
+    return 0;
+}
+
 fn print_num(n: u32) -> u32 {
     let zero: u32;
     zero = 48;
@@ -8,10 +32,6 @@ fn print_num(n: u32) -> u32 {
         putchar(zero + n % 10);
     }
     return 0;
-}
-
-fn println() -> u32 {
-    return putchar(10);
 }
 
 fn fibbonaci(a: u32, b: u32, i: u32) -> u32 {
@@ -33,7 +53,6 @@ fn fibbonaci(a: u32, b: u32, i: u32) -> u32 {
 
 
 fn main() -> u32 {
-    print_num(100);
-    println();
+    print_hello_world();
     return fibbonaci(1, 1, 10);
 }

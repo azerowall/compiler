@@ -84,7 +84,7 @@ impl Codegen {
 
     pub fn gen(&mut self, program: &Program) {
         unsafe {
-            self.add_llvm_extern_func();
+            //self.add_llvm_extern_func();
         }
         for func in &program.funcs {
             unsafe { self.cg_func(func); }
@@ -116,37 +116,44 @@ impl Codegen {
     }
 
     unsafe fn cg_func(&mut self, function: &Func) {
-        let ret_type = self.get_llvm_type(&function.ret_type);
-        let args_types: Vec<_> = function.args
+        let ret_type = self.get_llvm_type(&function.decl.ret);
+        let args_types: Vec<_> = function.decl.args
             .iter()
             .map(|arg| self.get_llvm_type(&arg.ty))
             .collect();
 
         let func_type = llvm::core::LLVMFunctionType(ret_type, args_types.as_ptr() as _, args_types.len() as _, 0);
-        let func_name = ffi::CString::new(function.ident.as_bytes()).unwrap();
+        let func_name = ffi::CString::new(function.decl.ident.as_bytes()).unwrap();
         let func = llvm::core::LLVMAddFunction(self.module, func_name.as_ptr(), func_type);
-
-        let start_bb = llvm::core::LLVMAppendBasicBlockInContext(self.context, func, b"entry\0".as_ptr() as _);
-        llvm::core::LLVMPositionBuilderAtEnd(self.builder, start_bb);
-
-        self.vars.push_scope();
-        for (i, arg) in function.args.iter().enumerate() {
-            let cname = ffi::CString::new(arg.ident.as_bytes()).unwrap();
-            
-            // Не самое лучшее решение, т.к. мы копируем параметры на стек.
-            // Вероятно llvm соптимизирует это, но всё же.
-            // TODO: различать изменяемые и неизменяемые параметры (let / let mut)
-            // и в зависимости от этого выделять память на стеке или нет
-            let arg_value = llvm::core::LLVMGetParam(func, i as _);
-            let arg_type = llvm::core::LLVMTypeOf(arg_value);
-            let new_arg_value = llvm::core::LLVMBuildAlloca(self.builder, arg_type, cname.as_ptr());
-            llvm::core::LLVMBuildStore(self.builder, arg_value, new_arg_value);
-            self.vars.push(arg.ident.clone(), new_arg_value);
+        if function.decl.external {
+            // dummy
+            llvm::core::LLVMSetFunctionCallConv(func, llvm::LLVMCallConv::LLVMCCallConv as _);
         }
-        if let Stmt::Block(ref stmts) = function.body {
-            for stmt in stmts {
-                println!("{:?}",stmt);
-                self.cg_stmt(func, stmt);
+
+        if let Some(ref body) = function.body {
+            let start_bb = llvm::core::LLVMAppendBasicBlockInContext(self.context, func, b"entry\0".as_ptr() as _);
+            llvm::core::LLVMPositionBuilderAtEnd(self.builder, start_bb);
+
+            self.vars.push_scope();
+            for (i, arg) in function.decl.args.iter().enumerate() {
+                let cname = ffi::CString::new(arg.ident.as_bytes()).unwrap();
+                
+                // Не самое лучшее решение, т.к. мы копируем параметры на стек.
+                // Вероятно llvm соптимизирует это, но всё же.
+                // TODO: различать изменяемые и неизменяемые параметры (let / let mut)
+                // и в зависимости от этого выделять память на стеке или нет
+                let arg_value = llvm::core::LLVMGetParam(func, i as _);
+                let arg_type = llvm::core::LLVMTypeOf(arg_value);
+                let new_arg_value = llvm::core::LLVMBuildAlloca(self.builder, arg_type, cname.as_ptr());
+                llvm::core::LLVMBuildStore(self.builder, arg_value, new_arg_value);
+                self.vars.push(arg.ident.clone(), new_arg_value);
+            }
+
+            if let Stmt::Block(ref stmts) = body {
+                for stmt in stmts {
+                    println!("{:?}",stmt);
+                    self.cg_stmt(func, stmt);
+                }
             }
         }
         self.vars.pop_scope();
