@@ -1,143 +1,262 @@
 use std::ptr;
+use std::ffi;
 use std::collections::HashMap;
 
 use llvm_sys as llvm;
+use llvm::prelude::*;
 
 use crate::ast::*;
 
-struct SymbolTable {
-    symbols: HashMap<String, *mut llvm::LLVMValue>
+
+enum Variable {
+    Arg(LLVMValueRef),
+    Var(LLVMValueRef),
 }
 
-
-unsafe fn codegen(ast: &Stmt) {
-    // Set up a context, module and builder in that context.
-    let context = llvm::core::LLVMContextCreate();
-    let module = llvm::core::LLVMModuleCreateWithName(b"nop\0".as_ptr() as *const _);
-    let builder = llvm::core::LLVMCreateBuilderInContext(context);
-
-    // Get the type signature for void nop(void);
-    // Then create it in our module.
-    //let void = llvm::core::LLVMVoidTypeInContext(context);
-    let u32_t = llvm::core::LLVMInt32TypeInContext(context);
-    let function_type = llvm::core::LLVMFunctionType(u32_t, ptr::null_mut(), 0, 0);
-    let function = llvm::core::LLVMAddFunction(module, b"main\0".as_ptr() as *const _,
-                                                function_type);
-
-    // Create a basic block in the function and set our builder to generate
-    // code in it.
-    let bb = llvm::core::LLVMAppendBasicBlockInContext(context, function,
-                                                        b"entry\0".as_ptr() as *const _);
-    llvm::core::LLVMPositionBuilderAtEnd(builder, bb);
-
-    let mut symbols = SymbolTable { symbols: HashMap::new() };
-    
-    // Emit a `ret void` into the function
-    //llvm::core::LLVMBuildRetVoid(builder);
-
-    codegen_stmt(context, builder, function, &mut symbols, &ast);
-
-    // Dump the module as IR to stdout.
-    //llvm::core::LLVMDumpModule(module);
-    llvm::core::LLVMPrintModuleToFile(module, b"out.s\0".as_ptr().cast(), ptr::null_mut());
-
-    // Clean up. Values created in the context mostly get cleaned up there.
-    llvm::core::LLVMDisposeBuilder(builder);
-    llvm::core::LLVMDisposeModule(module);
-    llvm::core::LLVMContextDispose(context);
+struct Variables {
+    vars: HashMap<String, LLVMValueRef>,
 }
 
-unsafe fn codegen_stmt(context: *mut llvm::LLVMContext,
-                        builder: *mut llvm::LLVMBuilder,
-                        func: *mut llvm::LLVMValue,
-                        symbols: &mut SymbolTable,
-                        stmt: &Stmt) {
-    match stmt {
-        Stmt::Expr(e) => {
-            codegen_expr(context, builder, symbols, e);
-        },
-        Stmt::Block(stmts) => {
-            for stmt in stmts {
-                codegen_stmt(context, builder, func, symbols, stmt);
-            }
-        },
-        Stmt::VarDecl(decl) => {
-            let u32_type = llvm::core::LLVMInt32TypeInContext(context);
-            let value = llvm::core::LLVMConstInt(u32_type, 0, 0);
-            symbols.symbols.insert(decl.ident.clone(), value);
-        },
-        Stmt::Ret(e) => {
-            let e = codegen_expr(context, builder, symbols, e);
-            llvm::core::LLVMBuildRet(builder, e);
-        },
-        Stmt::If(cond, if_body, else_body) => {
-            let cond = codegen_expr(context, builder, symbols, cond);
-            let u32_type = llvm::core::LLVMInt32TypeInContext(context);
-            let zero = llvm::core::LLVMConstInt(u32_type, 0, 0);
-            let cond = llvm::core::LLVMBuildICmp(builder, llvm::LLVMIntPredicate::LLVMIntEQ, cond, zero, "is_nonzero\0".as_ptr() as _);
-
-            let if_bb = llvm::core::LLVMAppendBasicBlockInContext(context, func, "then\0".as_ptr() as _);
-            let else_bb = llvm::core::LLVMAppendBasicBlockInContext(context, func, "else\0".as_ptr() as _);
-            let merge_bb = llvm::core::LLVMAppendBasicBlockInContext(context, func, "merge\0".as_ptr() as _);
-
-            llvm::core::LLVMBuildCondBr(builder, cond, if_bb, else_bb);
-
-            llvm::core::LLVMPositionBuilderAtEnd(builder, if_bb);
-            codegen_stmt(context, builder, func, symbols, if_body);
-            llvm::core::LLVMBuildBr(builder, merge_bb);
-
-            if let Some(else_body) = else_body {
-                llvm::core::LLVMPositionBuilderAtEnd(builder, else_bb);
-                codegen_stmt(context, builder, func, symbols, else_body);
-                llvm::core::LLVMBuildBr(builder, merge_bb);
-            }
-            llvm::core::LLVMPositionBuilderAtEnd(builder, merge_bb);
-        },
-        Stmt::While(..) => {
-            // ..
+impl Variables {
+    fn new() -> Self {
+        Self {
+            vars: HashMap::new()
         }
+    }
+
+    fn get(&self, name: &str) -> Option<&LLVMValueRef> {
+        self.vars.get(name)
+    }
+    fn get_mut(&mut self, name: &str) -> Option<&mut LLVMValueRef> {
+        self.vars.get_mut(name)
+    }
+
+    fn push(&mut self, name: String, value: LLVMValueRef) {
+        self.vars.insert(name, value);
+    }
+
+    fn push_scope(&mut self) {
+        // пока контекст глобальный
+    }
+
+    fn pop_scope(&mut self) {
+
     }
 }
 
 
-unsafe fn codegen_expr(context: *mut llvm::LLVMContext, builder: *mut llvm::LLVMBuilder, symbols: &mut SymbolTable, expr: &Expr) -> *mut llvm::LLVMValue {
-    match expr {
-        Expr::Literal(value) => {
-            let u32_type = llvm::core::LLVMInt32TypeInContext(context);
-            llvm::core::LLVMConstInt(u32_type, *value as u64, 0)
-        },
-        Expr::Add(lhs, rhs) => {
-            let lhs = codegen_expr(context, builder, symbols, &*lhs);
-            let rhs = codegen_expr(context, builder, symbols, &*rhs);
 
-            llvm::core::LLVMBuildAdd(builder, lhs, rhs, b"addtmp\0".as_ptr() as _)
-        },
-        Expr::Sub(lhs, rhs) => {
-            let lhs = codegen_expr(context, builder, symbols, &*lhs);
-            let rhs = codegen_expr(context, builder, symbols, &*rhs);
+pub struct Codegen {
+    context: LLVMContextRef,
+    module: LLVMModuleRef,
+    builder: LLVMBuilderRef,
+    vars: Variables,
+}
 
-            llvm::core::LLVMBuildSub(builder, lhs, rhs, b"subtmp\0".as_ptr() as _)
-        },
-        Expr::Mul(lhs, rhs) => {
-            let lhs = codegen_expr(context, builder, symbols, &*lhs);
-            let rhs = codegen_expr(context, builder, symbols, &*rhs);
-
-            llvm::core::LLVMBuildMul(builder, lhs, rhs, b"multmp\0".as_ptr() as _)
-        },
-        Expr::Div(lhs, rhs) => {
-            let lhs = codegen_expr(context, builder, symbols, &*lhs);
-            let rhs = codegen_expr(context, builder, symbols, &*rhs);
-
-            llvm::core::LLVMBuildUDiv(builder, lhs, rhs, b"divtmp\0".as_ptr() as _)
-        },
-        Expr::Ref(name) => {
-            let value = *symbols.symbols.get(name).unwrap();
-            value
+impl Codegen {
+    pub fn new() -> Self {
+        unsafe {
+            let context = llvm::core::LLVMContextCreate();
+            let module = llvm::core::LLVMModuleCreateWithName(b"mod\0".as_ptr() as _);
+            let builder = llvm::core::LLVMCreateBuilderInContext(context);
+        
+            Self {
+                context,
+                module,
+                builder,
+                vars: Variables::new()
+            }
         }
-        Expr::Assign(name, e) => {
-            let e = codegen_expr(context, builder, symbols, e);
-            *symbols.symbols.get_mut(name).unwrap() = e;
-            e
+    }
+
+    pub fn dump_to_file(&self, name: &str) {
+        unsafe {
+            let name = ffi::CString::new(name).unwrap();
+            llvm::core::LLVMPrintModuleToFile(self.module, name.as_ptr() as _, ptr::null_mut());
+        }
+    }
+
+    pub fn dump(&self) {
+        unsafe {
+            llvm::core::LLVMDumpModule(self.module);
+        }
+    }
+
+    pub fn gen(&mut self, program: &Program) {
+        for func in &program.funcs {
+            unsafe { self.cg_func(func); }
+        }
+    }
+
+    unsafe fn get_llvm_type(&mut self, _ty: &Type) -> LLVMTypeRef {
+        //let ret_type = llvm::core::LLVMGetTypeByName(M: LLVMModuleRef, Name: *const ::libc::c_char);
+        llvm::core::LLVMInt32TypeInContext(self.context)
+    }
+
+    unsafe fn cg_func(&mut self, function: &Func) {
+        let ret_type = self.get_llvm_type(&function.ret_type);
+        let args_types: Vec<_> = function.args
+            .iter()
+            .map(|arg| self.get_llvm_type(&arg.ty))
+            .collect();
+
+        let func_type = llvm::core::LLVMFunctionType(ret_type, args_types.as_ptr() as _, args_types.len() as _, 0);
+        let func_name = ffi::CString::new(function.ident.as_bytes()).expect("func_name_convert");
+        let func = llvm::core::LLVMAddFunction(self.module, func_name.as_ptr(), func_type);
+
+        let start_bb = llvm::core::LLVMAppendBasicBlockInContext(self.context, func, b"entry\0".as_ptr() as _);
+        llvm::core::LLVMPositionBuilderAtEnd(self.builder, start_bb);
+
+        self.vars.push_scope();
+        //todo!("add args");
+        for (i, arg) in function.args.iter().enumerate() {
+            let value = llvm::core::LLVMGetParam(func, i as _);
+            self.vars.push(arg.ident.clone(), value);
+        }
+        if let Stmt::Block(ref stmts) = function.body {
+            for stmt in stmts {
+                self.cg_stmt(func, stmt);
+            }
+        }
+        self.vars.pop_scope();
+
+    }
+
+    unsafe fn make_nonzero_cmp(&self, cond: LLVMValueRef) -> LLVMValueRef {
+        let int_type = llvm::core::LLVMInt32TypeInContext(self.context);
+        let zero = llvm::core::LLVMConstInt(int_type, 0, 0);
+        let cond = llvm::core::LLVMBuildICmp(self.builder,
+            llvm::LLVMIntPredicate::LLVMIntNE, cond, zero, "is_nonzero\0".as_ptr() as _);
+        cond
+    }
+
+    unsafe fn cg_stmt(&mut self, func: LLVMValueRef, stmt: &Stmt) {
+        match stmt {
+            Stmt::Expr(e) => {
+                self.cg_expr(func, e);
+            },
+            Stmt::Block(stmts) => {
+                self.vars.push_scope();
+                for stmt in stmts {
+                    self.cg_stmt(func, stmt);
+                }
+                self.vars.pop_scope();
+            },
+            Stmt::VarDecl(decl) => {
+                let int_type = llvm::core::LLVMInt32TypeInContext(self.context);
+                let name = ffi::CString::new(decl.ident.as_bytes()).unwrap();
+                let value = llvm::core::LLVMBuildAlloca(self.builder, int_type, name.as_ptr());
+                self.vars.push(decl.ident.clone(), value);
+            },
+            Stmt::Ret(e) => {
+                let e = self.cg_expr(func, e);
+                llvm::core::LLVMBuildRet(self.builder, e);
+            },
+            Stmt::If(cond, then_body, else_body) => {
+                let cond = self.cg_expr(func, cond);
+                let cond = self.make_nonzero_cmp(cond);
+    
+                let merge_bb = llvm::core::LLVMAppendBasicBlockInContext(self.context, func, "merge\0".as_ptr() as _);
+                let then_bb = llvm::core::LLVMAppendBasicBlockInContext(self.context, func, "then\0".as_ptr() as _);
+                let else_bb = if else_body.is_some() {
+                    llvm::core::LLVMAppendBasicBlockInContext(self.context, func, "else\0".as_ptr() as _)
+                } else {
+                    merge_bb
+                };
+    
+                llvm::core::LLVMBuildCondBr(self.builder, cond, then_bb, else_bb);
+    
+                llvm::core::LLVMPositionBuilderAtEnd(self.builder, then_bb);
+                self.cg_stmt(func, then_body);
+                llvm::core::LLVMBuildBr(self.builder, merge_bb);
+    
+                if let Some(else_body) = else_body {
+                    llvm::core::LLVMPositionBuilderAtEnd(self.builder, else_bb);
+                    self.cg_stmt(func, else_body);
+                    llvm::core::LLVMBuildBr(self.builder, merge_bb);
+                }
+                llvm::core::LLVMPositionBuilderAtEnd(self.builder, merge_bb);
+            },
+            Stmt::While(cond, body) => {
+                let cond_bb = llvm::core::LLVMAppendBasicBlockInContext(self.context, func, b"cond\0".as_ptr() as _);
+                let body_bb = llvm::core::LLVMAppendBasicBlockInContext(self.context, func, b"body\0".as_ptr() as _);
+                let merge_bb = llvm::core::LLVMAppendBasicBlockInContext(self.context, func, b"merge\0".as_ptr() as _);
+                
+                llvm::core::LLVMBuildBr(self.builder, cond_bb);
+                llvm::core::LLVMPositionBuilderAtEnd(self.builder, cond_bb);
+                let cond = self.cg_expr(func, cond);
+                let cond = self.make_nonzero_cmp(cond);
+                llvm::core::LLVMBuildCondBr(self.builder, cond, body_bb, merge_bb);
+                
+                llvm::core::LLVMPositionBuilderAtEnd(self.builder, body_bb);
+                self.cg_stmt(func, body);
+                llvm::core::LLVMBuildBr(self.builder, cond_bb);
+
+                llvm::core::LLVMPositionBuilderAtEnd(self.builder, merge_bb);
+            }
+        }
+    }
+
+    unsafe fn cg_expr(&mut self, func: LLVMValueRef, expr: &Expr) -> LLVMValueRef {
+        match expr {
+            Expr::Literal(value) => {
+                let int_type = llvm::core::LLVMInt32TypeInContext(self.context);
+                llvm::core::LLVMConstInt(int_type, *value as u64, 0)
+            },
+            Expr::Add(lhs, rhs) => {
+                let lhs = self.cg_expr(func, &*lhs);
+                let rhs = self.cg_expr(func, &*rhs);
+    
+                llvm::core::LLVMBuildAdd(self.builder, lhs, rhs, b"addtmp\0".as_ptr() as _)
+            },
+            Expr::Sub(lhs, rhs) => {
+                let lhs = self.cg_expr(func, &*lhs);
+                let rhs = self.cg_expr(func, &*rhs);
+    
+                llvm::core::LLVMBuildSub(self.builder, lhs, rhs, b"subtmp\0".as_ptr() as _)
+            },
+            Expr::Mul(lhs, rhs) => {
+                let lhs = self.cg_expr(func, &*lhs);
+                let rhs = self.cg_expr(func, &*rhs);
+    
+                llvm::core::LLVMBuildMul(self.builder, lhs, rhs, b"multmp\0".as_ptr() as _)
+            },
+            Expr::Div(lhs, rhs) => {
+                let lhs = self.cg_expr(func, &*lhs);
+                let rhs = self.cg_expr(func, &*rhs);
+    
+                llvm::core::LLVMBuildUDiv(self.builder, lhs, rhs, b"divtmp\0".as_ptr() as _)
+            },
+            Expr::Ref(name) => {
+                let value = *self.vars.get(name)
+                    .expect(&format!("Referenced wariable '{}' not exist", name));
+                
+                let name = ffi::CString::new(name.as_bytes()).unwrap();
+                let value = llvm::core::LLVMBuildLoad(self.builder, value, name.as_ptr());
+                value
+            },
+            Expr::Assign(name, expr) => {
+                let expr = self.cg_expr(func, expr);
+                let var = *self.vars.get(name)
+                    .expect(&format!("Referenced wariable '{}' not exist", name));
+                llvm::core::LLVMBuildStore(self.builder, expr, var);
+                expr
+            },
+            Expr::Call(name, args) => {
+                let name = ffi::CString::new(name.as_bytes()).unwrap();
+                let func_ref = llvm::core::LLVMGetNamedFunction(self.module, name.as_ptr());
+                llvm::core::LLVMBuildCall(self.builder, func_ref, args.as_ptr() as _, args.len() as _, b"call\0".as_ptr() as _)
+            }
+        }
+    }
+}
+
+impl Drop for Codegen {
+    fn drop(&mut self) {
+        unsafe {
+            llvm::core::LLVMDisposeBuilder(self.builder);
+            llvm::core::LLVMDisposeModule(self.module);
+            llvm::core::LLVMContextDispose(self.context);
         }
     }
 }

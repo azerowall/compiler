@@ -7,6 +7,7 @@ use std::fs::File;
 use std::io::prelude::*;
 
 use parser::code_parser;
+use codegen::Codegen;
 
 
 
@@ -17,19 +18,19 @@ fn main() {
         let mut file = File::open("program").unwrap();
         file.read_to_string(&mut code).unwrap();
     }
-    
-    println!("{}", code);
 
     let ast = code_parser::program(&code);
     
     if let Ok(ast) = ast {
-        println!("{:#?}", ast);
-        /*
-        unsafe {
-            codegen(&ast);
-        }
-        */
+        //println!("{:#?}", ast);
+
+        let mut cg = Codegen::new();
+        cg.gen(&ast);
+        cg.dump_to_file("out.s");
+        cg.dump();
     } else {
         println!("{:#?}", ast);
     }
+
+    println!("Done!");
 }

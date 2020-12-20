@@ -2,8 +2,8 @@ use crate::ast::*;
 
 peg::parser!{
     pub grammar code_parser() for str {
-        pub rule program() -> Vec<Func>
-            = _ f:function() ** _ { f }
+        pub rule program() -> Program
+            = _ funcs:function() ** _ { Program { funcs } }
 
         rule function() -> Func
             = "fn" _ ident:ident() "(" _ args:func_args() _ ")" _  "->" _ ty:ident() _ body:statement_block() _
@@ -57,8 +57,12 @@ peg::parser!{
             / a:atom() _ "/" _ b:product() { Expr::Div(Box::new(a), Box::new(b)) }
             / atom()
 
+        rule func_call() -> Expr
+            = name:ident() _ "(" _ e:expression() ** ", " _ ")" { Expr::Call(name, e) }
+
         rule atom() -> Expr
             = n:int_literal() { n }
+            / n:func_call() { n }
             / n:ident() { Expr::Ref(n) }
             / "(" _ e:expression() _ ")" { e }
 

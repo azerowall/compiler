@@ -1,20 +1,22 @@
 
-fn some_func(n: u32) -> u32 {
-    while n {
-        n = n - 1;
-    }
-    return n;
-}
 
-fn main(arg: u32) -> u32 {
-    let a: u32;
+fn fibbonaci() -> u32 {
+    let fib1: u32;
+    let fib2: u32;
+    let fib_sum: u32;
     
-    if 10 {
-        a = 2;
-    } else {
-        a = 1;
+    fib1 = 1;
+    fib2 = 1;
+    while i {
+        fib_sum = fib1 + fib2;
+        fib1 = fib2;
+        fib2 = fib_sum;
+        i = i - 1;
     }
-    return a;
+    return fib_sum;
 }
 
 
+fn main() -> u32 {
+    return fibbonaci(8);
+}

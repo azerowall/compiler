@@ -1,15 +1,8 @@
 
-pub type Ident = String;
 
 #[derive(Debug)]
-pub struct Type {
-    pub ident: Ident,
-}
-
-#[derive(Debug)]
-pub struct VarDecl {
-    pub ident: Ident,
-    pub ty: Type,
+pub struct Program {
+    pub funcs: Vec<Func>,
 }
 
 #[derive(Debug)]
@@ -39,4 +32,18 @@ pub enum Expr {
     Literal(u32),
     Ref(Ident),
     Assign(Ident, Box<Expr>),
+    Call(Ident, Vec<Expr>),
 }
+
+#[derive(Debug)]
+pub struct VarDecl {
+    pub ident: Ident,
+    pub ty: Type,
+}
+
+#[derive(Debug)]
+pub struct Type {
+    pub ident: Ident,
+}
+
+pub type Ident = String;
